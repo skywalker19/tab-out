@@ -26,6 +26,50 @@
 // All open tabs — populated by fetchOpenTabs()
 let openTabs = [];
 
+const THEME_STORAGE_KEY = 'tabOutTheme';
+
+function getPreferredTheme() {
+  return window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+}
+
+function applyTheme(theme) {
+  const nextTheme = theme === 'dark' ? 'dark' : 'light';
+  document.body.classList.toggle('theme-dark', nextTheme === 'dark');
+
+  const toggle = document.getElementById('themeToggle');
+  const text = document.getElementById('themeToggleText');
+  if (!toggle) return;
+
+  const isDark = nextTheme === 'dark';
+  toggle.setAttribute('aria-pressed', String(isDark));
+  toggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+  toggle.setAttribute('aria-label', toggle.title);
+  if (text) text.textContent = isDark ? 'Light' : 'Dark';
+}
+
+async function initializeTheme() {
+  try {
+    const stored = await chrome.storage.local.get(THEME_STORAGE_KEY);
+    applyTheme(stored[THEME_STORAGE_KEY] || getPreferredTheme());
+  } catch {
+    applyTheme(getPreferredTheme());
+  }
+}
+
+async function toggleTheme() {
+  const nextTheme = document.body.classList.contains('theme-dark') ? 'light' : 'dark';
+  applyTheme(nextTheme);
+
+  try {
+    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: nextTheme });
+  } catch {
+    // Storage failures should not block the immediate theme switch.
+  }
+}
+
 /**
  * fetchOpenTabs()
  *
@@ -819,7 +863,7 @@ function renderDomainCard(group) {
   </span>`;
 
   const dupeBadge = hasDupes
-    ? `<span class="open-tabs-badge" style="color:var(--accent-amber);background:rgba(200,113,58,0.08);">
+    ? `<span class="open-tabs-badge" style="color:var(--accent-amber);background:var(--amber-tint);">
         ${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}
       </span>`
     : '';
@@ -1182,6 +1226,12 @@ async function renderDashboard() {
    ---------------------------------------------------------------- */
 
 document.addEventListener('click', async (e) => {
+  const themeToggle = e.target.closest('#themeToggle');
+  if (themeToggle) {
+    await toggleTheme();
+    return;
+  }
+
   // Walk up the DOM to find the nearest element with data-action
   const actionEl = e.target.closest('[data-action]');
   if (!actionEl) return;
@@ -1479,4 +1529,4 @@ document.addEventListener('input', async (e) => {
 /* ----------------------------------------------------------------
    INITIALIZE
    ---------------------------------------------------------------- */
-renderDashboard();
+initializeTheme().then(renderDashboard);
